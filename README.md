@@ -84,7 +84,7 @@
 ### 4.1 Notation for Early Experience  
 
 - 对于专家数据集中的每个状态  
-  $$D_{\text{expert}} = \{(s_i, a_i)\}_{i=1}^N$$  
+  $$D_{expert} = \{(s_i, a_i)\}_{i=1}^N$$  
   定义候选动作集合  
   $$A_i = \{a_i^1, a_i^2, \ldots, a_i^K\}$$  
   其中从初始策略 $\pi_\theta(\cdot | s_i)$ 中采样得到 $K$ 个替代动作。分析中也包含专家动作 $a_i$。
@@ -101,20 +101,20 @@
   - 任务进度变化。  
 
 - 将这些交互收集为 rollout 数据集：  
-  $$D_{\text{rollout}} = \{(s_i, a_i^j, s_i^j) \mid i \in [N], j \in [K]\}, \tag{2}$$  
+  $$D_{rollout} = \{(s_i, a_i^j, s_i^j) \mid i \in [N], j \in [K]\} \quad (2)$$  
   其中每个三元组表示一个状态、该状态下执行的替代动作，以及由此产生的下一个状态。  
 
 - 所有替代动作 $a_i^j$ 均不同于专家动作 $a_i$，从而使智能体能够体验来自自身动作提议的多样化状态转移。  
-  该 rollout 数据集 $D_{\text{rollout}}$ 提供了丰富的监督信号，而无需显式奖励。  
+  该 rollout 数据集 $D_{rollout}$ 提供了丰富的监督信号，而无需显式奖励。  
 
 - 下一个状态集合  
   $$\{s_i^j \mid j \in [K]\}$$  
   通过环境反馈编码了关于动作质量的隐式信号，使智能体能够从专家与非专家行为的结果中学习。  
 
 - 基于第 3 节的符号，我们利用专家数据集  
-  $$D_{\text{expert}} = \{(s_i, a_i)\}_{i=1}^N$$  
+  $$D_{expert} = \{(s_i, a_i)\}_{i=1}^N$$  
   与 rollout 数据集  
-  $$D_{\text{rollout}} = \{(s_i, a_i^j, s_i^j) \mid i \in [N], j \in [K]\}$$  
+  $$D_{rollout} = \{(s_i, a_i^j, s_i^j) \mid i \in [N], j \in [K]\}$$  
   在相同的早期经验原则下，发展出两种不同的训练方法。  
   核心洞见在于：来自非专家动作的下一个状态 $s_i^j$ 提供了无需显式奖励的有价值监督信号。  
   接下来，我们将说明如何利用该数据集来实现两种早期经验方法。
@@ -126,7 +126,7 @@
 - **核心思想**  
   - 将世界建模（world modeling）视为一种**辅助预测任务（auxiliary prediction task）**，帮助智能体从早期经验中内化环境动态。  
   - 在本设定中，状态完全以自然语言表示，因此**下一状态预测**可被建模为标准的**next-token prediction**任务。  
-  - 受 LLM 世界模型研究启发（Gu 等，2025），我们使用来自 rollout 数据集 $D_{\text{rollout}}$ 的下一个状态作为语言智能体策略 $\pi_\theta$ 的直接训练信号。  
+  - 受 LLM 世界模型研究启发（Gu 等，2025），我们使用来自 rollout 数据集 $D_{rollout}$ 的下一个状态作为语言智能体策略 $\pi_\theta$ 的直接训练信号。  
 
 - **直观示例**  
   - 例如在网页订票任务中，模型可以预测在输入无效日期后网页的状态，并从错误信息中学习下一状态的自然语言表示。  
@@ -134,10 +134,10 @@
 
 - **训练目标定义**  
   对于每个 rollout 三元组  
-  $$(s_i, a_i^j, s_i^j) \in D_{\text{rollout}}$$  
+  $$(s_i, a_i^j, s_i^j) \in D_{rollout}$$  
   构造预测任务：模型输入状态–动作对 $(s_i, a_i^j)$，学习预测对应的下一状态 $s_i^j$。  
   其训练目标为 next-token 预测损失：  
-  $$\mathcal{L}_{\text{IWM}} = - \sum_{(s_i, a_i^j, s_i^j) \in D_{\text{rollout}}} \log p_\theta(s_i^j | s_i, a_i^j), \tag{3}$$  
+  $$\mathcal{L}_{IWM} = - \sum_{(s_i, a_i^j, s_i^j) \in D_{rollout}} \log p_\theta(s_i^j | s_i, a_i^j) \quad (3)$$  
   其中 $p_\theta$ 表示语言模型的输出分布。  
   我们在**世界建模**与**策略执行**中共享相同参数 $\theta$，使策略能够直接内化环境动态。  
 
@@ -145,9 +145,9 @@
   - 该目标鼓励模型捕获环境行为的规律，如常见转移、副作用及无效动作结果。  
   - 与用于规划的显式世界模型不同，本隐式建模方法将预测信号直接整合进策略学习，作为**轻量级预训练**，在监督学习或下游优化前进行。  
   - 它使智能体接触多样化的非专家行为，提升对分布偏移的鲁棒性，减少对专家轨迹的依赖。  
-  - 实践中，rollout 数据量通常比 $D_{\text{expert}}$ 大一个数量级，因此采用两阶段流程：  
-    1. 先使用 $\mathcal{L}_{\text{IWM}}$ 训练以内化环境动态；  
-    2. 再在 $D_{\text{expert}}$ 上微调（即 $\mathcal{L}_{\text{IL}}$）。  
+  - 实践中，rollout 数据量通常比 $D_{expert}$ 大一个数量级，因此采用两阶段流程：  
+    1. 先使用 $\mathcal{L}_{IWM}$ 训练以内化环境动态；  
+    2. 再在 $D_{expert}$ 上微调（即 $\mathcal{L}_{IL}$）。  
 
 ---
 
@@ -166,14 +166,14 @@
 
 - **训练数据与目标**  
   - 将生成的三元组收集为反思数据集  
-    $$D_{\text{refl}} = \{(s_i, a_i^j, c_i^j)\}$$  
+    $$D_{refl} = \{(s_i, a_i^j, c_i^j)\}$$  
   - 智能体在状态 $s_i$ 条件下联合预测思维链与专家动作（拼接为目标序列 $c_i^j \circ a_i$），  
     损失函数为：  
-    $$\mathcal{L}_{\text{SR}} = - \sum_{(s_i, a_i^j, c_i^j) \in D_{\text{refl}}} \log p_\theta(c_i^j, a_i | s_i), \tag{4}$$  
+    $$\mathcal{L}_{SR} = - \sum_{(s_i, a_i^j, c_i^j) \in D_{refl}} \log p_\theta(c_i^j, a_i | s_i) \quad (4)$$  
     其中 $p_\theta$ 为语言模型输出分布。  
 
 - **联合训练策略**  
-  - 在训练中，将 $D_{\text{refl}}$ 与 $D_{\text{expert}}$ 混合，使用标准的 next-token 损失训练模型。  
+  - 在训练中，将 $D_{refl}$ 与 $D_{expert}$ 混合，使用标准的 next-token 损失训练模型。  
   - 思维链仅为反思数据生成，而对专家数据集中的轨迹，若原本包含思维链则保留之。  
   - 该联合训练平衡了基于专家演示的稳健决策与基于探索反馈的对比性洞察。  
 
